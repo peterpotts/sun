@@ -3,10 +3,10 @@ package com.peterpotts.sun
 import com.peterpotts.common.tool.ConsoleShell
 
 class ApplicationShell(val colors: Boolean) extends ConsoleShell {
-  val name = "Mobius"
+  val name = "Sun"
 
   val help =
-    "java -Dlog.path=<logs> <class>" ::
+    "java <class>" ::
       "" ::
       "Usage:" ::
       Nil

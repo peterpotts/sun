@@ -35,6 +35,7 @@ libraryDependencies ++= {
     val scalaTest = "2.2.4"
     val mockito = "1.10.19"
     val akka = "2.3.11"
+    val jodaConvert = "1.8"
     val jodaTime = "2.9.3"
     val typesafeConfig = "1.2.1"
     val slf4j = "1.7.21"
@@ -56,6 +57,7 @@ libraryDependencies ++= {
     val akkaAgent = "com.typesafe.akka" %% "akka-agent" % Versions.akka
     val akkaTestkit = "com.typesafe.akka" %% "akka-testkit" % Versions.akka
 
+    val jodaConvert = "org.joda" % "joda-convert" % Versions.jodaConvert
     val jodaTime = "joda-time" % "joda-time" % Versions.jodaTime
 
     val typesafeConfig = "com.typesafe" % "config" % Versions.typesafeConfig
@@ -82,6 +84,7 @@ libraryDependencies ++= {
     akkaSlf4j,
     akkaAgent,
     akkaTestkit % "test",
+    jodaConvert,
     jodaTime,
     typesafeConfig,
     slf4jApi,
