@@ -10,7 +10,8 @@ object Application extends LazyLogging {
   def main(args: Array[String]): Unit = {
     val location = Location(latitude = 37.563, longitude = -122.3255)
     val sun = new Sun(location)
-    val dateTime = new DateTime(2016, 5, 5, 14, 0, 0)
+    //val dateTime = new DateTime(2016, 5, 5, 14, 0, 0)
+    val dateTime = new DateTime()
     val position = sun.position(dateTime)
     println(position)
   }
@@ -47,9 +48,30 @@ case class Sun(location: Location) {
     val sinDeclination = s(declination)
     val cosDeclination = c(declination)
     val cosHourAngle = c(hourAngle)
-    val elevation = as(sinDeclination * sinLatitude + cosDeclination * cosLatitude * cosHourAngle)
-    val relativeAzimuth = ac((sinDeclination * cosLatitude - cosDeclination * sinLatitude * cosHourAngle) / c(elevation))
+    val elevationFactor = sinDeclination * sinLatitude + cosDeclination * cosLatitude * cosHourAngle
+    val azimuthFactor = sinDeclination * cosLatitude - cosDeclination * sinLatitude * cosHourAngle
+    val elevation = as(elevationFactor)
+    val relativeAzimuth = ac(azimuthFactor / c(elevation))
     val azimuth = if (hourAngle < 0) relativeAzimuth else 360 - relativeAzimuth
     Position(elevation = elevation, azimuth = azimuth)
   }
+}
+
+trait Blind {
+  def close(position: Position): Boolean
+}
+
+case object LeftBlind extends Blind {
+  def close(position: Position) =
+    position.elevation > 0.0 &&
+      position.elevation < toDegrees(atan(95.0 / 80.0)) &&
+      position.azimuth > 140.0 - 90.0 + toDegrees(atan(123.0 / 102.0)) &&
+      position.azimuth < 140.0 + 90.0 - toDegrees(atan(87.0 / 104.0))
+}
+
+case object RightBlind extends Blind {
+  def close(position: Position) =
+    position.elevation > 0.0 &&
+      position.azimuth > 140.0 - 90.0 &&
+      position.azimuth < 140.0 + 90.0
 }
