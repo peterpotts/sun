@@ -1,170 +1,125 @@
 package com.peterpotts.sun
 
 import com.typesafe.scalalogging.LazyLogging
-import org.joda.time.{DateTime, DateTimeZone, Hours}
+import org.joda.time.DateTimeConstants._
+import org.joda.time._
 
-import scala.collection.immutable.Stream.#::
+import scala.collection.immutable.IndexedSeq
 
 //noinspection ScalaStyle
 object Application extends LazyLogging {
 
-  implicit class DecoratedStreamDateTime(dateTimes: Stream[DateTime]) {
-    def takeYear: Stream[DateTime] = {
-      val end = dateTimes.head.plusYears(1)
-      dateTimes.takeWhile(_.isBefore(end))
-    }
+  val localDateFormat = "MMM dd"
 
-    def filterFirstOfTheDay: Stream[DateTime] = {
-      def loop(dateTimes: Stream[DateTime]): Stream[DateTime] =
-        dateTimes match {
-          case head #:: body #:: tail =>
-            if (head.toLocalDate == body.toLocalDate)
-              loop(head #:: tail)
-            else
-              head #:: loop(body #:: tail)
-        }
-
-      loop(dateTimes)
-    }
-
-    def filterLastOfTheDay: Stream[DateTime] = {
-      def loop(dateTimes: Stream[DateTime]): Stream[DateTime] =
-        dateTimes match {
-          case head #:: body #:: tail =>
-            if (head.toLocalDate == body.toLocalDate)
-              loop(body #:: tail)
-            else
-              head #:: loop(body #:: tail)
-        }
-
-      loop(dateTimes)
-    }
+  def time(minuteOfDay: Int) = {
+    val hourOfDay = minuteOfDay / MINUTES_PER_HOUR
+    val minuteOfHour = minuteOfDay % MINUTES_PER_HOUR
+    f"$hourOfDay%02d:$minuteOfHour%02d"
   }
 
-  implicit class DecoratedStreamAction(actions: Stream[Action]) {
-    def trim: Stream[Action] = {
-      def loop(actions: Stream[Action]): Stream[Action] =
-        actions match {
-          case head #:: body #:: tail =>
-            if (head.close == body.close)
-              loop(head #:: tail)
-            else
-              head #:: loop(body #:: tail)
-          case _ => actions
-        }
+  def message(name: String, optionalMinuteOfDay: Option[Int]): String =
+    optionalMinuteOfDay.map(minuteOfDay => message(s"set $name at", minuteOfDay)).getOrElse(s"unset $name")
 
-      loop(actions)
-    }
+  def message(name: String, minuteOfDay: Int): String = s"$name ${time(minuteOfDay)}"
 
-    def merge(that: Stream[Action]): Stream[Action] = {
-      def loop(left: Stream[Action], right: Stream[Action]): Stream[Action] =
-        left match {
-          case leftHead #:: leftTail =>
-            right match {
-              case rightHead #:: rightTail =>
-                if (leftHead.dateTime.isBefore(rightHead.dateTime))
-                  leftHead #:: loop(leftTail, right)
-                else
-                  rightHead #:: loop(left, rightTail)
-              case _ => left
-            }
-          case _ => right
-        }
+  val granularity = 60
 
-      loop(actions, that)
-    }
+  def floor(minute: Int) = (minute / granularity) * granularity
 
-    def takeYear: Stream[Action] = {
-      val end = actions.head.dateTime.plusYears(1)
-      actions.takeWhile(_.dateTime.isBefore(end))
-    }
+  def ceiling(minute: Int) = ((minute + granularity - 1) / granularity) * granularity
+
+  def leftRightCloseOpen(
+    sun: Sun,
+    dateTimeZone: DateTimeZone,
+    localDate: LocalDate): (Option[Int], Option[Int], Option[Int], Option[Int]) = {
+    val dateTimeAtStartOfDay = localDate.toDateTimeAtStartOfDay(dateTimeZone)
+    val minutes = 0 until MINUTES_PER_DAY
+    val dateTimes = minutes.map(dateTimeAtStartOfDay.plusMinutes)
+    val positions = dateTimes.map(sun.position)
+    val minutePositions = minutes.zip(positions)
+
+    val leftMinuteCloses = minutePositions.map {
+      case (minute, position) => minute -> LeftBlind.close(position)
+    }.trim.tail
+
+    val rightMinuteCloses = minutePositions.map {
+      case (minute, position) => minute -> RightBlind.close(position)
+    }.trim.tail
+
+    val leftCloseMinute = leftMinuteCloses.filter(_._2).map(_._1).headOption
+    val leftOpenMinute = leftMinuteCloses.filter(!_._2).map(_._1).headOption
+    val rightCloseMinute = rightMinuteCloses.filter(_._2).map(_._1).headOption
+    val rightOpenMinute = rightMinuteCloses.filter(!_._2).map(_._1).headOption
+
+    (leftCloseMinute, leftOpenMinute, rightCloseMinute, rightOpenMinute)
   }
 
   def main(args: Array[String]): Unit = {
+    val today = LocalDate.now()
+    println("-" * 40)
+    println(s"Date: ${today.toString}")
+    val gmtOffset = -8
+    println(s"Time zone: $gmtOffset")
     val location = Location(latitude = 37.563, longitude = -122.3255)
     val sun = new Sun(location)
-    val gmtOffset = -8
-    val timeZone = DateTimeZone.forOffsetHours(gmtOffset)
-    val now = new DateTime().toDateTime(timeZone).withSecondOfMinute(0).withMillisOfSecond(0)
+    val dateTimeZone = DateTimeZone.forOffsetHours(gmtOffset)
+    val localDates = (0 to 366).map(today.plusDays)
 
-//    val localDates
+    leftRightCloseOpen(sun, dateTimeZone, today) match {
+      case (leftClose, leftOpen, rightClose, rightOpen) =>
+        leftClose.foreach(minuteOfDay => println(message("Left: Sun starts at", minuteOfDay)))
+        leftOpen.foreach(minuteOfDay => println(message("Left: Sun stops at", minuteOfDay)))
+        rightClose.foreach(minuteOfDay => println(message("Right: Sun starts at", minuteOfDay)))
+        rightOpen.foreach(minuteOfDay => println(message("Right: Sun stops at", minuteOfDay)))
 
+        println(message("left to close", leftClose.map(floor)))
+        println(message("left to open", leftOpen.map(ceiling)))
+        println(message("right to close", rightClose.map(floor)))
+        println(message("right to open", rightOpen.map(ceiling)))
+    }
 
-
-
-    val dateTimes = Stream.from(0).map(now.plusMinutes)
-    val positions = dateTimes.map(sun.position)
-    val dateTimePositions = dateTimes.zip(positions)
-
-
-    val leftActions = dateTimePositions.map {
-      case (dateTime, position) => Action(dateTime, "left", LeftBlind.close(position))
-    }.trim.tail
-
-    val rightActions = dateTimePositions.map {
-      case (dateTime, position) => Action(dateTime, "right", RightBlind.close(position))
-    }.trim.tail
-
-    val actions = leftActions.merge(rightActions)
-
-    //actions.take(10).foreach(println)
-
-    val leftCloseDateTimes = leftActions.filter(_.close).map(_.dateTime).filterFirstOfTheDay
-    val leftOpenDateTimes = leftActions.filter(!_.close).map(_.dateTime).filterLastOfTheDay
-    val rightCloseDateTimes = rightActions.filter(_.close).map(_.dateTime).filterFirstOfTheDay
-    val rightOpenDateTimes = rightActions.filter(!_.close).map(_.dateTime).filterLastOfTheDay
-
-
-
-    def daily(dateTimes: Stream[DateTime]): Boolean =
-      dateTimes match {
-        case head #:: body #:: tail =>
-          val hours = Hours.hoursBetween(head, body).getHours
-          if (hours > 25) {
-            println(hours)
-            println(head)
-            println(body)
-          }
-          daily(body #:: tail)
-        case _ => true
+    val leftRightOpenCloses = localDates.map { localDate =>
+      leftRightCloseOpen(sun, dateTimeZone, localDate) match {
+        case (leftClose, leftOpen, rightClose, rightOpen) =>
+          IndexedSeq(
+            "left to close" -> leftClose.map(floor),
+            "left to open" -> leftOpen.map(ceiling),
+            "right to close" -> rightClose.map(floor),
+            "right to open" -> rightOpen.map(ceiling))
       }
+    }
 
+    println("-" * 40)
+    val IndexedSeq(leftCloses, leftOpens, rightCloses, rightOpens) = leftRightOpenCloses.transpose
 
+    val localDateLeftCloses = localDates.zip(leftCloses).trim.tail
+    val localDateLeftOpens = localDates.zip(leftOpens).trim.tail
+    val localDateRightCloses = localDates.zip(rightCloses).trim.tail
+    val localDateRightOpens = localDates.zip(rightOpens).trim.tail
 
-    println("Left close is daily : " + daily(leftCloseDateTimes.takeYear))
-    println("Left open is daily : " + daily(leftOpenDateTimes.takeYear))
-    //println("Right close is daily : " + daily(rightCloseDateTimes.takeYear))
-    //println("Right open is daily : " + daily(rightOpenDateTimes.takeYear))
+    val localDateActions = IndexedSeq(localDateLeftCloses, localDateLeftOpens, localDateRightCloses, localDateRightOpens)
 
-    //    def floor(dateTime: DateTime) = dateTime.withMinuteOfHour(0).withSecondOfMinute(0)
-    //    def ceiling(dateTime: DateTime) = floor(dateTime).plusHours(1)
-    //
-    //    def strip(actions: Stream[DateTime]): Stream[DateTime] =
-    //      actions match {
-    //        case head #:: body #:: tail =>
-    //          if (head.hourOfDay == body.hourOfDay)
-    //            strip(head #:: tail)
-    //          else
-    //            head #:: strip(body #:: tail)
-    //      }
-    //
-    //
-    //    val rightCloseSchedules = strip(rightCloseDateTimes.map(floor)).tail
-    //    val rightOpenSchedules = strip(rightOpenDateTimes.map(ceiling)).tail
-    //
-    //    val time = "HH:mm"
-    //    val date = "MMM dd"
-    //
-    //    val schedules = yearOfActions(merge(
-    //      rightCloseSchedules.map(Action(_, "right", close = true)),
-    //      rightOpenSchedules.map(Action(_, "right", close = false)))).map {
-    //      case Action(dateTime, name, close) =>
-    //        val action = if (close) "close" else "open"
-    //        s"${dateTime.toString(date)}: Set $name blind to $action at ${dateTime.toString(time)}"
-    //    }
+    implicit val localDateOrdering = new Ordering[LocalDate] {
+      def compare(left: LocalDate, right: LocalDate) = left.compareTo(right)
+    }
 
-    //schedules.foreach(println)
+    val localDateNameMinutes = localDateActions.reduce(_ merge _)
 
+    val localDateMessages = localDateNameMinutes.map {
+      case (localDate, (name, optionalMinuteOfDay)) =>
+        localDate -> message(name, optionalMinuteOfDay)
+    }
+
+    val localDateGroupedMessages = localDateMessages.groupBy(_._1).mapValues(_.map(_._2))
+
+    localDateGroupedMessages.toIndexedSeq.sortBy(_._1).foreach {
+      case (localDate, groupedMessage) =>
+        val date = localDate.toString(localDateFormat)
+        val message = groupedMessage.reverse.mkString(" and ")
+        println(s"On $date, $message")
+    }
+
+    println("-" * 40)
   }
 }
 
