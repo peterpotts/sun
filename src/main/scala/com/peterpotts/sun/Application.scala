@@ -64,6 +64,9 @@ object Application extends LazyLogging {
     val sun = new Sun(location)
     val dateTimeZone = DateTimeZone.forOffsetHours(gmtOffset)
     val localDates = (0 to 366).map(today.plusDays)
+    val position = sun.position(new DateTime())
+    println("Elevation: " + position.elevation)
+    println("Azimuth: " + position.azimuth)
 
     leftRightCloseOpen(sun, dateTimeZone, today) match {
       case (leftClose, leftOpen, rightClose, rightOpen) =>
