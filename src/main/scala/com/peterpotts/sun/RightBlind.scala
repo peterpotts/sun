@@ -1,8 +1,9 @@
 package com.peterpotts.sun
 
-case object RightBlind extends Blind {
-  def close(position: Position) =
-    position.azimuth > forwardAzimuth - 90.0 &&
-      position.azimuth < forwardAzimuth + 90.0 &&
-      position.elevation > horizon
-}
+case object RightBlind extends Blind(
+  browUp = 62.0,
+  browForward = 14.0,
+  leftWallForward = 14.0,
+  leftWallToRightWindow = 72.0,
+  rightWallForward = 14.0,
+  leftWindowToRightWall = 72.0)
