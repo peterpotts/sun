@@ -3,6 +3,7 @@ package com.peterpotts.sun
 import com.typesafe.scalalogging.LazyLogging
 import org.joda.time.DateTimeConstants._
 import org.joda.time._
+import spray.http.Uri
 
 import scala.collection.immutable.IndexedSeq
 
@@ -115,13 +116,37 @@ object Application extends LazyLogging {
 
     val localDateGroupedMessages = localDateMessages.groupBy(_._1).mapValues(_.map(_._2))
 
+    var links = IndexedSeq.empty[Uri]
+
     localDateGroupedMessages.toIndexedSeq.sortBy(_._1).foreach {
       case (localDate, groupedMessage) =>
         val date = localDate.toString(localDateFormat)
         val message = groupedMessage.reverse.mkString(" and ")
         println(s"On $date, $message")
+        val format = "yyyyMMdd'T'HHmmss'Z'"
+        val dateTimeZone = DateTimeZone.getDefault
+        val startOfDay = localDate.toDateTimeAtStartOfDay.toDateTime(DateTimeZone.UTC)
+        val start = startOfDay.plusHours(-3).toString(format)
+        val end = startOfDay.plusHours(-2).toString(format)
+
+        val uri = Uri(
+          scheme = "https",
+          authority = Uri.Authority(host = Uri.Host("www.google.com")),
+          path = Uri.Path./("calendar") / "render",
+          query = Uri.Query(
+            "action" -> "TEMPLATE",
+            "text" -> s"Somfy: $message",
+            "dates" -> s"$start/$end",
+            "details" -> "",
+            "location" -> "",
+            "sf" -> "true",
+            "output" -> "xml"))
+
+        links +:= uri
     }
 
+    println("-" * 40)
+    links.foreach(println)
     println("-" * 40)
   }
 }
