@@ -55,6 +55,32 @@ object Application extends LazyLogging {
     (leftCloseMinute, leftOpenMinute, rightCloseMinute, rightOpenMinute)
   }
 
+  def leftLeftRightCloseOpen(
+    sun: Sun,
+    dateTimeZone: DateTimeZone,
+    localDate: LocalDate): (Option[Int], Option[Int], Option[Int], Option[Int]) = {
+    val dateTimeAtStartOfDay = localDate.toDateTimeAtStartOfDay(dateTimeZone)
+    val minutes = 0 until MINUTES_PER_DAY
+    val dateTimes = minutes.map(dateTimeAtStartOfDay.plusMinutes)
+    val positions = dateTimes.map(sun.position)
+    val minutePositions = minutes.zip(positions)
+
+    val leftMinuteCloses = minutePositions.map {
+      case (minute, position) => minute -> LeftLeftBlind.close(position)
+    }.trim.tail
+
+    val rightMinuteCloses = minutePositions.map {
+      case (minute, position) => minute -> LeftRightBlind.close(position)
+    }.trim.tail
+
+    val leftCloseMinute = leftMinuteCloses.filter(_._2).map(_._1).headOption
+    val leftOpenMinute = leftMinuteCloses.filter(!_._2).map(_._1).headOption
+    val rightCloseMinute = rightMinuteCloses.filter(_._2).map(_._1).headOption
+    val rightOpenMinute = rightMinuteCloses.filter(!_._2).map(_._1).headOption
+
+    (leftCloseMinute, leftOpenMinute, rightCloseMinute, rightOpenMinute)
+  }
+
   def main(args: Array[String]): Unit = {
     val today = LocalDate.now()
     println("-" * 40)
@@ -62,14 +88,17 @@ object Application extends LazyLogging {
     val gmtOffset = -8
     println(s"Time zone: $gmtOffset")
     val location = Location(latitude = 37.563, longitude = -122.3255)
-    val sun = new Sun(location)
+    val sun = Sun(location)
     val dateTimeZone = DateTimeZone.forOffsetHours(gmtOffset)
     val localDates = (0 to 366).map(today.plusDays)
     val position = sun.position(new DateTime())
     println("Elevation: " + position.elevation)
     println("Azimuth: " + position.azimuth)
 
-    leftRightCloseOpen(sun, dateTimeZone, today) match {
+    val function = leftRightCloseOpen(_, _, _)
+    //val function = leftLeftRightCloseOpen(_, _, _)
+
+    function(sun, dateTimeZone, today) match {
       case (leftClose, leftOpen, rightClose, rightOpen) =>
         leftClose.foreach(minuteOfDay => println(message("Left: Sun starts at", minuteOfDay)))
         leftOpen.foreach(minuteOfDay => println(message("Left: Sun stops at", minuteOfDay)))
@@ -83,7 +112,7 @@ object Application extends LazyLogging {
     }
 
     val leftRightOpenCloses = localDates.map { localDate =>
-      leftRightCloseOpen(sun, dateTimeZone, localDate) match {
+      function(sun, dateTimeZone, localDate) match {
         case (leftClose, leftOpen, rightClose, rightOpen) =>
           IndexedSeq(
             "left to close" -> leftClose.map(floor),
@@ -142,7 +171,7 @@ object Application extends LazyLogging {
             "sf" -> "true",
             "output" -> "xml"))
 
-        links +:= uri
+        links :+= uri
     }
 
     println("-" * 40)

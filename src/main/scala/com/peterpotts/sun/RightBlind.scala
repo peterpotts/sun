@@ -1,6 +1,7 @@
 package com.peterpotts.sun
 
 case object RightBlind extends Blind(
+  name = "Right",
   browUp = 62.0,
   browForward = 14.0,
   leftWallForward = 14.0,

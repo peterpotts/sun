@@ -3,6 +3,7 @@ package com.peterpotts.sun
 import scala.math._
 
 class Blind(
+  name: String,
   browUp: Double,
   browForward: Double,
   leftWallForward: Double,
